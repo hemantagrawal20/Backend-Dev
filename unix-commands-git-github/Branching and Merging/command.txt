@@ -1,0 +1,17 @@
+git branch feature-a
+git checkout feature-a
+cat > server.js
+ls
+git add server.js
+git commit -m"[Akash] add: server file"
+git push
+git push -u origin feature-a
+git checkout main
+git checkout -b 'feature-b'
+cat > server.js
+git add server.js
+git commit -m"[Akash] add: server file"
+git push -u origin feature-b
+git status
+git checkout feature-a
+git merge feature-b

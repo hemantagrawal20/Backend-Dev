@@ -1,0 +1,22 @@
+git checkout main
+git checkout -b branch1
+echo "Change from branch1" >> README.md
+git add README.md
+git commit -m "Branch1 changes"
+git checkout main
+git checkout -b branch2
+echo "Change from branch2" >> README.md
+git add README.md
+git commit -m "Branch2 changes"
+git checkout main
+git merge branch1
+git merge branch2
+<<<<<<< HEAD
+Change from branch1
+=======
+Change from branch2
+>>>>>>> branch2
+Change from branch1
+Change from branch2
+git add README.md
+git commit -m "Resolve merge conflict"

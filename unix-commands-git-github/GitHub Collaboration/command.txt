@@ -1,0 +1,7 @@
+git clone https://github.com/Akash-Jadon-7895/backend-Dev.git
+cd Frontend-Dev
+git checkout -b new-feature
+echo "Contribution update" >> contribution.txt
+git add .
+git commit -m "Add contribution"
+git push origin new-feature

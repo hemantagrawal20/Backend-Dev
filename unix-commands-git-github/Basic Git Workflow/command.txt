@@ -1,0 +1,14 @@
+git init
+git branch -M main
+cat > README.md ”This is a first file”
+git add README.md
+git commit -m” [Akash] add: First file”
+git remote add origin https://github.com/Akash-Jadon-7895/Demo.git
+git remote -v
+git push -u origin main
+//Write more in README.md file then
+README.md ”Readme file”
+git add README.md
+git commit -m” [Akash] add: First change”
+git status
+ls
