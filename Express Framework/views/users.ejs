@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Users</title>
+  <link rel="stylesheet" href="../public/css/styles.css">
+</head>
+<body>
+  <h2>User List</h2>
+
+  <form method="GET">
+    <input type="text" name="name" placeholder="Search by name" />
+    <button type="submit">Search</button>
+  </form>
+
+  <ul>
+    <% if (users.length === 0) { %>
+      <li>No users found</li>
+    <% } %>
+
+    <% users.forEach(user => { %>
+      <li><%= user.name %></li>
+    <% }) %>
+  </ul>
+</body>
+</html>
