@@ -1,0 +1,119 @@
+/* ========== RESET ========== */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+/* ========== BODY ========== */
+body {
+  background-color: #f4f6f8;
+  color: #333;
+  padding: 40px;
+}
+
+/* ========== HEADINGS ========== */
+h1, h2 {
+  margin-bottom: 20px;
+  color: #222;
+}
+
+/* ========== LINKS ========== */
+a {
+  text-decoration: none;
+  color: #007bff;
+  font-weight: 500;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+/* ========== FORMS ========== */
+form {
+  background: #fff;
+  padding: 20px;
+  max-width: 500px;
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  margin-bottom: 30px;
+}
+
+input,
+textarea {
+  width: 100%;
+  padding: 10px;
+  margin-top: 10px;
+  border-radius: 4px;
+  border: 1px solid #ccc;
+}
+
+textarea {
+  min-height: 100px;
+}
+
+button {
+  margin-top: 15px;
+  padding: 10px 15px;
+  background: #007bff;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+button:hover {
+  background: #0056b3;
+}
+
+/* ========== LISTS ========== */
+ul {
+  list-style: none;
+  margin-top: 20px;
+}
+
+li {
+  background: white;
+  padding: 12px;
+  margin-bottom: 10px;
+  border-radius: 4px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* ========== GALLERY ========== */
+img {
+  border-radius: 6px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+/* ========== BLOG POST PAGE ========== */
+p {
+  margin: 15px 0;
+  line-height: 1.6;
+}
+
+/* ========== 404 PAGE ========== */
+body h1 {
+  font-size: 48px;
+}
+
+body h2 {
+  font-size: 28px;
+}
+
+/* ========== RESPONSIVE ========== */
+@media (max-width: 600px) {
+  body {
+    padding: 20px;
+  }
+
+  form {
+    width: 100%;
+  }
+
+  img {
+    width: 100%;
+    margin-bottom: 15px;
+  }
+}

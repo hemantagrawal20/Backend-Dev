@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Gallery</title>
+  <link rel="stylesheet" href="../public/css/styles.css">
+</head>
+<body>
+  <h2>Photo Gallery</h2>
+
+  <% images.forEach(img => { %>
+    <img src="/images/<%= img %>" width="200" style="margin:10px;" />
+  <% }) %>
+</body>
+</html>
