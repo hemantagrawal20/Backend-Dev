@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Employee Payroll Form</title>
+    <link rel="stylesheet" href="/form.css">
+
+
+</head>
+
+<body>
+
+    <div class="form-container">
+
+        <h2>Employee Payroll Form</h2>
+
+        <form action="/add" method="POST">
+
+            <!-- Name -->
+            <label>Name</label>
+            <input type="text" name="name" required>
+
+            <!-- Profile Image -->
+            <label>Profile Image</label>
+            <div class="profile-images">
+                <label>
+                    <input type="radio" name="profile" value="profile1.png">
+                    <img src="/images/profile1.png" alt="Profile1">
+                </label>
+
+                <label>
+                    <input type="radio" name="profile" value="profile2.png">
+                    <img src="/images/profile2.png" alt="Profile2">
+                </label>
+
+                <label>
+                    <input type="radio" name="profile" value="profile3.png">
+                    <img src="/images/profile3.png" alt="Profile3">
+                </label>
+
+                <label>
+                    <input type="radio" name="profile" value="profile4.png">
+                    <img src="/images/profile4.png" alt="Profile4">
+                </label>
+            </div>
+
+
+            <!-- Gender -->
+            <label>Gender</label>
+            <div class="gender">
+                <label>
+                    <input type="radio" name="gender" value="Male" required> Male
+                </label>
+                <label>
+                    <input type="radio" name="gender" value="Female"> Female
+                </label>
+            </div>
+
+            <!-- Department -->
+            <label>Department</label>
+            <div class="department">
+                <label><input type="checkbox" name="department" value="HR"> HR</label>
+                <label><input type="checkbox" name="department" value="Sales"> Sales</label>
+                <label><input type="checkbox" name="department" value="Finance"> Finance</label>
+                <label><input type="checkbox" name="department" value="Engineer"> Engineer</label>
+                <label><input type="checkbox" name="department" value="Others"> Others</label>
+            </div>
+
+            <!-- Salary -->
+            <label>Salary</label>
+            <select name="salary" required>
+                <option value="">Select Salary</option>
+                <option value="10000">10000</option>
+                <option value="20000">20000</option>
+                <option value="30000">30000</option>
+                <option value="40000">40000</option>
+            </select>
+
+            <!-- Start Date -->
+            <label>Start Date</label>
+            <input type="date" name="startDate" required>
+
+            <!-- Notes -->
+            <label>Notes</label>
+            <textarea name="notes"></textarea>
+
+            <!-- Buttons -->
+            <div class="buttons">
+                <a href="/"><button type="button" class="cancel">Cancel</button></a>
+                <button type="submit" class="submit">Submit</button>
+                <button type="reset" class="reset">Reset</button>
+            </div>
+
+        </form>
+
+    </div>
+
+</body>
+
+</html>

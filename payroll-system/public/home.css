@@ -1,0 +1,95 @@
+< !DOCTYPE html><html><head><title>Employee Management</title><style>body {
+    margin: 0;
+    font-family: 'Segoe UI', Arial, sans-serif;
+    background: linear-gradient(135deg, #667eea, #764ba2);
+}
+
+.container {
+    width: 95%;
+    max-width: 1100px;
+    margin: 50px auto;
+    background: white;
+    padding: 25px;
+    border-radius: 10px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+}
+
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+h2 {
+    margin: 0;
+    color: #333;
+}
+
+.add-btn {
+    background-color: #2563eb;
+    color: white;
+    padding: 10px 18px;
+    text-decoration: none;
+    border-radius: 6px;
+    font-size: 14px;
+    transition: all 0.3s ease;
+}
+
+.add-btn:hover {
+    background-color: #1e40af;
+    transform: scale(1.05);
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    background: white;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+th {
+    background-color: #2563eb;
+    color: white;
+    padding: 12px;
+    text-align: left;
+}
+
+td {
+    padding: 12px;
+    border-bottom: 1px solid #eee;
+}
+
+tr:hover {
+    background-color: #f3f6ff;
+}
+
+.edit {
+    color: #2563eb;
+    text-decoration: none;
+    margin-right: 10px;
+}
+
+.delete {
+    color: #dc2626;
+    text-decoration: none;
+}
+
+.edit:hover {
+    text-decoration: underline;
+}
+
+.delete:hover {
+    text-decoration: underline;
+}
+
+@media (max-width: 768px) {
+    .header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 15px;
+    }
+}
+
+</style></head><body><div class="container"><div class="header"><h2>Employee List</h2><a href="#" class="add-btn">+Add Employee</a></div><table><tr><th>ID</th><th>Name</th><th>Department</th><th>Email</th><th>Action</th></tr><tr><td>1</td><td>Rahul Sharma</td><td>IT</td><td>rahul@email.com</td><td><a href="#" class="edit">Edit</a><a href="#" class="delete">Delete</a></td></tr><tr><td>2</td><td>Priya Singh</td><td>HR</td><td>priya@email.com</td><td><a href="#" class="edit">Edit</a><a href="#" class="delete">Delete</a></td></tr></table></div></body></html>

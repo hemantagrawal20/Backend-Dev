@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Employee Payroll</title>
+    <link rel="stylesheet" href="/home.css">
+</head>
+
+<body>
+
+    <div class="container">
+
+        <div class="header">
+            <h2>Employee Details</h2>
+            <a href="/add" class="add-btn">+ Add User</a>
+        </div>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Gender</th>
+                    <th>Department</th>
+                    <th>Salary</th>
+                    <th>Start Date</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+
+            <tbody>
+                <% employees.forEach(emp => { %>
+                    <tr>
+
+                        <!-- NAME + PROFILE IMAGE -->
+                        <td>
+                            <div style="display:flex; align-items:center; gap:10px;">
+                                <img src="/images/<%= emp.profile %>" style="width:40px; height:40px; border-radius:50%; object-fit:cover;">
+                                <%= emp.name %>
+                            </div>
+                        </td>
+
+                        <td>
+                            <%= emp.gender %>
+                        </td>
+                        <td>
+                            <%= emp.department %>
+                        </td>
+                        <td>₹
+                            <%= emp.salary %>
+                        </td>
+                        <td>
+                            <%= emp.startDate %>
+                        </td>
+
+                        <td>
+                            <a href="/edit/<%= emp.id %>" class="edit">Edit</a>
+                            <a href="/delete/<%= emp.id %>" class="delete">Delete</a>
+                        </td>
+
+                    </tr>
+                    <% }) %>
+            </tbody>
+
+        </table>
+
+    </div>
+
+</body>
+
+</html>

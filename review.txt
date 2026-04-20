@@ -1,0 +1,24 @@
+Q1 Explain Node.js architecture and single-threaded model.
+Answer--> Node.js work on event driven architecture.It uses single threaded model to handle multiple request using event loop, callback queen and  asyn-await without creating thread for every request. When a request made, Node.js deliever it to the system and continues handling other requests. 
+
+Q2 Explain file handling operations including read, write, delete, and directory management.
+Answer--> read--> readFile() is used to read data from file.
+          write--> writeFile() is used to write data in a file.
+          delete--> unlink() is used to delete data from file.
+          directory management--> fs.mkdir() → Creates a directory
+                                  fs.rmdir() → Removes a directory
+                                  fs.readdir() → Reads contents of a directory
+Q3 Explain request handling in Express including query parameters and request body parsing.
+Answer--> In Express.js, request handling is done using routes and middleware. A route defines how the server responds to a specific client request (such as GET, POST, PUT, DELETE).When a client sends a request, Express processes it and returns a response.
+1. Query Parameters:Query parameters are values passed in the URL after a question mark
+2. Request Body Parsing:Request body contains data sent by the client, mainly in POST or PUT requests.
+
+Q4 Explain indexing in MongoDB and its importance.
+Indexing is given to field to call it with index which make the data searching easy and faster.without indexing we have to check every request one by one.Importance of indexing is that it make the data searching fasterand increase efficiency aand performance.
+
+Q5 Explain cookies and sessions. How do they differ?
+Answer--> Cookies are small data structure which stores on browser.Cookies contain user data.cookies store recently store data.Cookies store on client side which send data on every request.Cookies are less secure.
+Session are data structure which store on server.session id store in cookies.seesion are more secure thar cookies.Used for authentication and user tracking
+
+
+
