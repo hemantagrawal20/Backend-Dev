@@ -1,0 +1,21 @@
+const mongoose = require('mongoose');
+
+const softDeleteSchema = new mongoose.Schema({
+  name: String,
+  isDeleted: {
+    type: Boolean,
+    default: false
+  }
+});
+
+softDeleteSchema.pre(/^find/, function (next) {
+  this.where({ isDeleted: false });
+  next();
+});
+
+softDeleteSchema.methods.softDelete = function () {
+  this.isDeleted = true;
+  return this.save();
+};
+
+module.exports = mongoose.model('SoftDelete', softDeleteSchema);

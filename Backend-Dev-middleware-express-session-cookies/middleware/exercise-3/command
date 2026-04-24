@@ -1,0 +1,23 @@
+const mongoose = require('mongoose');
+
+const userSchema = new mongoose.Schema({
+  name: String,
+  email: String,
+  lastLogin: Date,
+  lastLogout: Date,
+  lastActive: Date
+});
+
+userSchema.pre('save', function (next) {
+  if (this.isNew) {
+    this.lastLogin = new Date();
+  }
+  next();
+});
+
+userSchema.methods.updateActivity = function () {
+  this.lastActive = new Date();
+  return this.save();
+};
+
+module.exports = mongoose.model('User', userSchema);

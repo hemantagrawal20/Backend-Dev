@@ -1,0 +1,25 @@
+const jwt = require('jsonwebtoken');
+
+const mfaAuth = (req, res, next) => {
+  const token = req.headers.authorization;
+  const otp = req.headers['x-otp'];
+
+  if (!token || !otp) {
+    return res.status(401).json({ message: "Token or OTP missing" });
+  }
+
+  try {
+    const decoded = jwt.verify(token, "secretkey");
+
+    if (otp !== "123456") {
+      return res.status(401).json({ message: "Invalid OTP" });
+    }
+
+    req.user = decoded;
+    next();
+  } catch (err) {
+    return res.status(401).json({ message: "Invalid Token" });
+  }
+};
+
+module.exports = mfaAuth;
