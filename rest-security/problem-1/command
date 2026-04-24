@@ -1,0 +1,171 @@
+```js
+const express = require("express");
+const mongoose = require("mongoose");
+const session = require("express-session");
+const MongoStore = require("connect-mongo");
+const bcrypt = require("bcrypt");
+const helmet = require("helmet");
+const rateLimit = require("express-rate-limit");
+const validator = require("validator");
+
+const app = express();
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// ================= DB CONNECT =================
+mongoose.connect("mongodb://127.0.0.1:27017/shopeasy")
+.then(() => console.log("MongoDB Connected"))
+.catch(err => console.log(err));
+
+// ================= SCHEMAS =================
+const userSchema = new mongoose.Schema({
+  email: String,
+  password: String,
+  role: { type: String, default: "user" }
+});
+
+const productSchema = new mongoose.Schema({
+  name: String,
+  price: Number
+});
+
+const reviewSchema = new mongoose.Schema({
+  review: String
+});
+
+const User = mongoose.model("User", userSchema);
+const Product = mongoose.model("Product", productSchema);
+const Review = mongoose.model("Review", reviewSchema);
+
+// ================= HELMET =================
+app.use(helmet());
+
+app.use(helmet.contentSecurityPolicy({
+  directives: {
+    defaultSrc: ["'self'"],
+    scriptSrc: ["'self'", "https://www.youtube.com"],
+    imgSrc: ["'self'", "https://cdn.shop.com"],
+    frameSrc: ["https://www.youtube.com"]
+  }
+}));
+
+// ================= SESSION =================
+app.use(session({
+  secret: "supersecret",
+  resave: false,
+  saveUninitialized: false,
+  store: MongoStore.create({
+    mongoUrl: "mongodb://127.0.0.1:27017/shopeasy"
+  }),
+  cookie: {
+    httpOnly: true,
+    maxAge: 1000 * 60 * 30
+  }
+}));
+
+// ================= RATE LIMIT =================
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5
+});
+
+app.use("/login", loginLimiter);
+
+// ================= MIDDLEWARE =================
+const isAuth = (req, res, next) => {
+  if (!req.session.userId) return res.send("Login Required");
+  next();
+};
+
+const isAdmin = (req, res, next) => {
+  if (req.session.role !== "admin") return res.send("Admin only");
+  next();
+};
+
+// ================= AUTH ROUTES =================
+
+// Register
+app.post("/register", async (req, res) => {
+  const { email, password } = req.body;
+
+  const hashed = await bcrypt.hash(password, 10);
+  await User.create({ email, password: hashed });
+
+  res.send("User Registered");
+});
+
+// Login
+app.post("/login", async (req, res) => {
+  const { email, password } = req.body;
+
+  const user = await User.findOne({ email });
+  if (!user) return res.send("User not found");
+
+  const match = await bcrypt.compare(password, user.password);
+  if (!match) return res.send("Wrong password");
+
+  req.session.regenerate(() => {
+    req.session.userId = user._id;
+    req.session.role = user.role;
+    res.send("Login Successful");
+  });
+});
+
+// Logout
+app.get("/logout", (req, res) => {
+  req.session.destroy();
+  res.send("Logged out");
+});
+
+// ================= PRODUCT SEARCH =================
+
+// Safe search
+app.get("/search", async (req, res) => {
+  let search = req.query.q;
+
+  if (!search || typeof search !== "string") {
+    return res.send("Invalid search");
+  }
+
+  // Escape regex
+  search = search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+  const products = await Product.find({
+    name: { $regex: search, $options: "i" },
+    price: { $gte: 0 }
+  });
+
+  res.json(products);
+});
+
+// ================= REVIEW (XSS SAFE) =================
+app.post("/review", isAuth, async (req, res) => {
+  let { review } = req.body;
+
+  // Escape XSS
+  review = validator.escape(review);
+
+  if (review.length > 500) {
+    return res.send("Too long");
+  }
+
+  await Review.create({ review });
+
+  res.send("Review Added Safely");
+});
+
+// ================= ADMIN ROUTE =================
+app.get("/admin", isAuth, isAdmin, (req, res) => {
+  res.send("Welcome Admin");
+});
+
+// ================= DEFAULT =================
+app.get("/", (req, res) => {
+  res.send("ShopEasy Secure Server Running 🚀");
+});
+
+// ================= START =================
+app.listen(5000, () => {
+  console.log("Server running on port 5000");
+});
+```

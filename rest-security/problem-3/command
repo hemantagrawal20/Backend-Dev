@@ -1,0 +1,221 @@
+```js
+const express = require("express");
+const mongoose = require("mongoose");
+const session = require("express-session");
+const MongoStore = require("connect-mongo");
+const bcrypt = require("bcrypt");
+const helmet = require("helmet");
+const rateLimit = require("express-rate-limit");
+const validator = require("validator");
+const sanitizeHtml = require("sanitize-html");
+const multer = require("multer");
+const speakeasy = require("speakeasy");
+const cors = require("cors");
+
+const app = express();
+app.use(express.json());
+
+// ================= DB =================
+mongoose.connect("mongodb://127.0.0.1:27017/edulearn")
+.then(()=>console.log("DB Connected"))
+.catch(err=>console.log(err));
+
+// ================= SCHEMAS =================
+const userSchema = new mongoose.Schema({
+  email: String,
+  password: String,
+  role: String, // student / instructor / admin
+  mfaSecret: String
+});
+
+const courseSchema = new mongoose.Schema({
+  title: String,
+  description: String,
+  instructor: mongoose.Schema.Types.ObjectId
+});
+
+const quizSchema = new mongoose.Schema({
+  question: String,
+  answer: String,
+  submitted: Boolean,
+  userId: mongoose.Schema.Types.ObjectId
+});
+
+const User = mongoose.model("User", userSchema);
+const Course = mongoose.model("Course", courseSchema);
+const Quiz = mongoose.model("Quiz", quizSchema);
+
+// ================= HELMET =================
+app.use(helmet());
+app.use(helmet.contentSecurityPolicy({
+  directives: {
+    defaultSrc: ["'self'"],
+    scriptSrc: ["'self'", "https://analytics.com"],
+    imgSrc: ["'self'", "https://s3.amazonaws.com"],
+    mediaSrc: ["https://s3.amazonaws.com"], // videos
+    connectSrc: ["'self'", "https://api.stripe.com"],
+    frameSrc: ["https://www.youtube.com"]
+  }
+}));
+
+// ================= CORS =================
+app.use(cors({ origin: ["http://localhost:3000"], credentials: true }));
+
+// ================= SESSION =================
+app.use(session({
+  secret: "secret",
+  resave: false,
+  saveUninitialized: false,
+  store: MongoStore.create({
+    mongoUrl: "mongodb://127.0.0.1:27017/edulearn"
+  }),
+  cookie: {
+    httpOnly: true,
+    maxAge: 1000 * 60 * 30
+  }
+}));
+
+// ================= RATE LIMIT =================
+app.use("/login", rateLimit({ windowMs: 15*60*1000, max: 5 }));
+app.use("/quiz", rateLimit({ windowMs: 1*60*1000, max: 10 }));
+
+// ================= AUTH MIDDLEWARE =================
+const isAuth = (req,res,next)=>{
+  if(!req.session.userId) return res.send("Login required");
+  next();
+};
+
+const roleCheck = (role) => (req,res,next)=>{
+  if(req.session.role !== role) return res.send("Unauthorized");
+  next();
+};
+
+// ================= SANITIZATION =================
+const cleanHTML = (input)=>{
+  return sanitizeHtml(input,{
+    allowedTags:["b","i","strong","em","ul","li","p","a"],
+    allowedAttributes:{ a:["href"] }
+  });
+};
+
+// ================= FILE UPLOAD =================
+const upload = multer({
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+  fileFilter: (req,file,cb)=>{
+    if(file.mimetype === "application/pdf" || file.mimetype.startsWith("video/")){
+      cb(null,true);
+    } else {
+      cb(new Error("Invalid file type"));
+    }
+  }
+});
+
+// ================= REGISTER =================
+app.post("/register", async(req,res)=>{
+  let { email,password,role } = req.body;
+
+  if(!validator.isEmail(email)) return res.send("Invalid email");
+
+  if(password.length < 6) return res.send("Weak password");
+
+  const hash = await bcrypt.hash(password,10);
+
+  const user = await User.create({ email,password:hash,role });
+
+  // MFA for instructors
+  if(role === "instructor"){
+    const secret = speakeasy.generateSecret();
+    user.mfaSecret = secret.base32;
+    await user.save();
+
+    return res.json({ msg:"Scan QR for MFA", secret: secret.otpauth_url });
+  }
+
+  res.send("Registered");
+});
+
+// ================= LOGIN =================
+app.post("/login", async(req,res)=>{
+  const { email,password,token } = req.body;
+
+  const user = await User.findOne({ email });
+  if(!user) return res.send("User not found");
+
+  const match = await bcrypt.compare(password,user.password);
+  if(!match) return res.send("Wrong password");
+
+  // MFA verify for instructor
+  if(user.role === "instructor"){
+    const verified = speakeasy.totp.verify({
+      secret: user.mfaSecret,
+      encoding: "base32",
+      token
+    });
+
+    if(!verified) return res.send("MFA failed");
+  }
+
+  req.session.regenerate(()=>{
+    req.session.userId = user._id;
+    req.session.role = user.role;
+    res.send("Login success");
+  });
+});
+
+// ================= COURSE =================
+app.post("/course", isAuth, roleCheck("instructor"), async(req,res)=>{
+  let { title,description } = req.body;
+
+  description = cleanHTML(description);
+
+  await Course.create({
+    title,
+    description,
+    instructor: req.session.userId
+  });
+
+  res.send("Course created");
+});
+
+// FIX: Prevent data leakage
+app.get("/my-courses", isAuth, roleCheck("instructor"), async(req,res)=>{
+  const courses = await Course.find({ instructor: req.session.userId });
+  res.json(courses);
+});
+
+// ================= QUIZ =================
+app.post("/quiz", isAuth, async(req,res)=>{
+  let { question,answer } = req.body;
+
+  question = validator.escape(question);
+  answer = validator.escape(answer);
+
+  await Quiz.create({
+    question,
+    answer,
+    submitted: true,
+    userId: req.session.userId
+  });
+
+  res.send("Quiz submitted");
+});
+
+// FIX: Prevent modification after submission
+app.put("/quiz/:id", isAuth, async(req,res)=>{
+  const quiz = await Quiz.findById(req.params.id);
+
+  if(quiz.submitted) return res.send("Cannot modify");
+
+  res.send("Editable");
+});
+
+// ================= FILE UPLOAD =================
+app.post("/upload", isAuth, upload.single("file"), (req,res)=>{
+  res.send("File uploaded safely");
+});
+
+// ================= START =================
+app.listen(5000, ()=>{
+  console.log("EduLearn Secure Server Running 🚀");
+});
+```

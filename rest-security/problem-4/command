@@ -1,0 +1,212 @@
+```js
+const express = require("express");
+const mongoose = require("mongoose");
+const session = require("express-session");
+const MongoStore = require("connect-mongo");
+const bcrypt = require("bcrypt");
+const helmet = require("helmet");
+const rateLimit = require("express-rate-limit");
+const validator = require("validator");
+const sanitizeHtml = require("sanitize-html");
+const multer = require("multer");
+const crypto = require("crypto");
+const cors = require("cors");
+
+const app = express();
+app.use(express.json());
+
+// ================= DB =================
+mongoose.connect("mongodb://127.0.0.1:27017/medibook")
+.then(()=>console.log("DB Connected"))
+.catch(err=>console.log(err));
+
+// ================= ENCRYPTION =================
+const encrypt = (text) => {
+  const cipher = crypto.createCipheriv("aes-256-cbc", Buffer.alloc(32), Buffer.alloc(16));
+  let encrypted = cipher.update(text, "utf8", "hex");
+  encrypted += cipher.final("hex");
+  return encrypted;
+};
+
+// ================= SCHEMAS =================
+const userSchema = new mongoose.Schema({
+  name: String,
+  email: String,
+  password: String,
+  role: String, // patient, doctor, nurse, admin, insurance
+  phone: String,
+  dob: String
+});
+
+const recordSchema = new mongoose.Schema({
+  patientId: mongoose.Schema.Types.ObjectId,
+  doctorId: mongoose.Schema.Types.ObjectId,
+  data: String
+});
+
+const auditSchema = new mongoose.Schema({
+  userId: mongoose.Schema.Types.ObjectId,
+  action: String,
+  time: { type: Date, default: Date.now }
+});
+
+const User = mongoose.model("User", userSchema);
+const Record = mongoose.model("Record", recordSchema);
+const Audit = mongoose.model("Audit", auditSchema);
+
+// ================= HELMET =================
+app.use(helmet());
+
+// ================= CORS =================
+app.use(cors({ origin: ["http://localhost:3000"], credentials: true }));
+
+// ================= SESSION =================
+app.use(session({
+  secret: "health_secret",
+  resave: false,
+  saveUninitialized: false,
+  store: MongoStore.create({
+    mongoUrl: "mongodb://127.0.0.1:27017/medibook"
+  }),
+  cookie: {
+    httpOnly: true,
+    maxAge: 1000 * 60 * 15 // 15 min (healthcare stricter)
+  }
+}));
+
+// ================= RATE LIMIT =================
+app.use("/login", rateLimit({ windowMs: 15*60*1000, max: 5 }));
+
+// ================= RBAC =================
+const isAuth = (req,res,next)=>{
+  if(!req.session.userId) return res.send("Login required");
+  next();
+};
+
+const allowRoles = (...roles) => (req,res,next)=>{
+  if(!roles.includes(req.session.role)) return res.send("Forbidden");
+  next();
+};
+
+// ================= AUDIT LOG =================
+const logAudit = async(userId, action)=>{
+  await Audit.create({ userId, action });
+};
+
+// ================= VALIDATION =================
+const validatePatient = (data)=>{
+  if(!validator.isEmail(data.email)) return "Invalid email";
+  if(!validator.isMobilePhone(data.phone+"")) return "Invalid phone";
+  if(!validator.isDate(data.dob)) return "Invalid DOB";
+  return null;
+};
+
+// ================= FILE UPLOAD =================
+const upload = multer({
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (req,file,cb)=>{
+    const allowed = ["application/pdf","image/jpeg","image/png"];
+    if(allowed.includes(file.mimetype)){
+      cb(null,true);
+    } else {
+      cb(new Error("Invalid file"));
+    }
+  }
+});
+
+// ================= REGISTER =================
+app.post("/register", async(req,res)=>{
+  let { name,email,password,role,phone,dob } = req.body;
+
+  const err = validatePatient({ email,phone,dob });
+  if(err) return res.send(err);
+
+  if(password.length < 8) return res.send("Weak password");
+
+  const hash = await bcrypt.hash(password,10);
+
+  await User.create({ name,email,password:hash,role,phone,dob });
+
+  res.send("Registered");
+});
+
+// ================= LOGIN =================
+app.post("/login", async(req,res)=>{
+  const { email,password } = req.body;
+
+  const user = await User.findOne({ email });
+  if(!user) return res.send("Not found");
+
+  const match = await bcrypt.compare(password,user.password);
+  if(!match) return res.send("Wrong password");
+
+  req.session.regenerate(()=>{
+    req.session.userId = user._id;
+    req.session.role = user.role;
+    res.send("Login success");
+  });
+});
+
+// ================= MEDICAL RECORD =================
+app.post("/record", isAuth, allowRoles("doctor"), async(req,res)=>{
+  let { patientId,data } = req.body;
+
+  data = sanitizeHtml(data); // prevent XSS
+  data = encrypt(data); // encrypt sensitive data
+
+  await Record.create({
+    patientId,
+    doctorId: req.session.userId,
+    data
+  });
+
+  await logAudit(req.session.userId, "CREATE_RECORD");
+
+  res.send("Record saved");
+});
+
+// FIX: prevent IDOR attack
+app.get("/record/:id", isAuth, async(req,res)=>{
+  const record = await Record.findById(req.params.id);
+
+  if(!record) return res.send("Not found");
+
+  if(
+    record.patientId.toString() !== req.session.userId &&
+    record.doctorId.toString() !== req.session.userId &&
+    req.session.role !== "admin"
+  ){
+    return res.send("Unauthorized");
+  }
+
+  await logAudit(req.session.userId, "VIEW_RECORD");
+
+  res.json(record);
+});
+
+// ================= SEARCH (Injection Safe) =================
+app.get("/search", isAuth, async(req,res)=>{
+  let name = req.query.name;
+
+  if(typeof name !== "string") return res.send("Invalid");
+
+  name = name.replace(/[.*+?^${}()|[\]\\]/g,"\\$&");
+
+  const users = await User.find({
+    name: { $regex: name, $options: "i" }
+  });
+
+  res.json(users);
+});
+
+// ================= FILE UPLOAD =================
+app.post("/upload", isAuth, upload.single("file"), async(req,res)=>{
+  await logAudit(req.session.userId, "UPLOAD_FILE");
+  res.send("File uploaded securely");
+});
+
+// ================= START =================
+app.listen(5000, ()=>{
+  console.log("MediBook Secure Server Running 🚀");
+});
+```

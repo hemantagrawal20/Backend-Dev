@@ -1,0 +1,261 @@
+```js id="z8s1qd"
+const express = require("express");
+const mongoose = require("mongoose");
+const session = require("express-session");
+const MongoStore = require("connect-mongo");
+const bcrypt = require("bcrypt");
+const helmet = require("helmet");
+const rateLimit = require("express-rate-limit");
+const validator = require("validator");
+const speakeasy = require("speakeasy");
+const crypto = require("crypto");
+const cors = require("cors");
+
+const app = express();
+app.use(express.json());
+
+// ================= DB =================
+mongoose.connect("mongodb://127.0.0.1:27017/quickbank")
+.then(()=>console.log("DB Connected"))
+.catch(()=>console.log("DB Error"));
+
+// ================= SCHEMAS =================
+const userSchema = new mongoose.Schema({
+  email: String,
+  password: String,
+  balance: Number,
+  deviceId: String,
+  mfaSecret: String,
+  resetToken: String,
+  resetExpiry: Date
+});
+
+const txSchema = new mongoose.Schema({
+  userId: mongoose.Schema.Types.ObjectId,
+  to: String,
+  amount: Number,
+  description: String,
+  time: { type: Date, default: Date.now }
+});
+
+const auditSchema = new mongoose.Schema({
+  userId: mongoose.Schema.Types.ObjectId,
+  action: String,
+  meta: String,
+  time: { type: Date, default: Date.now }
+});
+
+const User = mongoose.model("User", userSchema);
+const Tx = mongoose.model("Tx", txSchema);
+const Audit = mongoose.model("Audit", auditSchema);
+
+// ================= HELMET =================
+app.use(helmet());
+app.use(helmet.contentSecurityPolicy({
+  directives: {
+    defaultSrc: ["'self'"],
+    scriptSrc: ["'self'"],
+    connectSrc: ["'self'"],
+    objectSrc: ["'none'"]
+  }
+}));
+
+// ================= CORS =================
+app.use(cors({ origin: ["http://localhost:3000"], credentials: true }));
+
+// ================= SESSION =================
+app.use(session({
+  secret: "bank_secret",
+  resave: false,
+  saveUninitialized: false,
+  store: MongoStore.create({
+    mongoUrl: "mongodb://127.0.0.1:27017/quickbank"
+  }),
+  cookie: {
+    httpOnly: true,
+    secure: false, // true in production (HTTPS)
+    maxAge: 1000 * 60 * 10 // 10 min
+  }
+}));
+
+// ================= RATE LIMIT =================
+app.use("/login", rateLimit({ windowMs: 15*60*1000, max: 5 }));
+app.use("/transfer", rateLimit({ windowMs: 1*60*1000, max: 3 }));
+
+// ================= SAFE ERROR =================
+const safeError = (res)=>{
+  return res.status(500).send("Something went wrong");
+};
+
+// ================= AUTH =================
+const isAuth = (req,res,next)=>{
+  if(!req.session.userId) return res.send("Login required");
+  next();
+};
+
+// ================= AUDIT =================
+const logAudit = async(userId,action,meta="")=>{
+  await Audit.create({ userId, action, meta });
+};
+
+// ================= REGISTER =================
+app.post("/register", async(req,res)=>{
+  try{
+    const { email,password } = req.body;
+
+    if(!validator.isEmail(email)) return res.send("Invalid email");
+    if(password.length < 8) return res.send("Weak password");
+
+    const hash = await bcrypt.hash(password,10);
+
+    const secret = speakeasy.generateSecret();
+
+    await User.create({
+      email,
+      password: hash,
+      balance: 5000,
+      mfaSecret: secret.base32
+    });
+
+    res.json({ msg:"Registered", mfa: secret.otpauth_url });
+
+  }catch{
+    safeError(res);
+  }
+});
+
+// ================= LOGIN =================
+app.post("/login", async(req,res)=>{
+  try{
+    const { email,password,deviceId } = req.body;
+
+    const user = await User.findOne({ email });
+    if(!user) return res.send("Invalid");
+
+    const match = await bcrypt.compare(password,user.password);
+    if(!match) return res.send("Invalid");
+
+    // Device check
+    if(user.deviceId && user.deviceId !== deviceId){
+      return res.send("New device detected");
+    }
+
+    user.deviceId = deviceId;
+    await user.save();
+
+    req.session.regenerate(()=>{
+      req.session.userId = user._id;
+      res.send("Login success");
+    });
+
+  }catch{
+    safeError(res);
+  }
+});
+
+// ================= TRANSFER =================
+app.post("/transfer", isAuth, async(req,res)=>{
+  try{
+    let { to, amount, description, token } = req.body;
+
+    if(!validator.isNumeric(amount+"")) return res.send("Invalid amount");
+    amount = Number(amount);
+
+    if(amount <= 0 || amount > 100000) return res.send("Invalid limit");
+
+    const user = await User.findById(req.session.userId);
+
+    if(user.balance < amount) return res.send("Insufficient funds");
+
+    // 2FA for >1000
+    if(amount > 1000){
+      const verified = speakeasy.totp.verify({
+        secret: user.mfaSecret,
+        encoding: "base32",
+        token
+      });
+
+      if(!verified) return res.send("2FA failed");
+    }
+
+    // sanitize description
+    description = validator.escape(description);
+
+    user.balance -= amount;
+    await user.save();
+
+    await Tx.create({
+      userId: user._id,
+      to,
+      amount,
+      description
+    });
+
+    await logAudit(user._id, "TRANSFER", amount+"");
+
+    res.send("Transfer success");
+
+  }catch{
+    safeError(res);
+  }
+});
+
+// ================= TRANSACTION HISTORY =================
+app.get("/transactions", isAuth, async(req,res)=>{
+  try{
+    const tx = await Tx.find({ userId: req.session.userId });
+    res.json(tx);
+  }catch{
+    safeError(res);
+  }
+});
+
+// ================= PASSWORD RESET =================
+app.post("/reset-request", async(req,res)=>{
+  try{
+    const { email } = req.body;
+
+    const user = await User.findOne({ email });
+    if(!user) return res.send("OK");
+
+    const token = crypto.randomBytes(32).toString("hex");
+
+    user.resetToken = token;
+    user.resetExpiry = Date.now() + 1000*60*10; // 10 min
+    await user.save();
+
+    res.send("Reset link sent");
+
+  }catch{
+    safeError(res);
+  }
+});
+
+app.post("/reset-password", async(req,res)=>{
+  try{
+    const { token,newPassword } = req.body;
+
+    const user = await User.findOne({
+      resetToken: token,
+      resetExpiry: { $gt: Date.now() }
+    });
+
+    if(!user) return res.send("Invalid/Expired");
+
+    user.password = await bcrypt.hash(newPassword,10);
+    user.resetToken = null;
+
+    await user.save();
+
+    res.send("Password reset success");
+
+  }catch{
+    safeError(res);
+  }
+});
+
+// ================= START =================
+app.listen(5000, ()=>{
+  console.log("QuickBank Secure Server Running 🚀");
+});
+```

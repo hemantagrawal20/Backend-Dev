@@ -1,0 +1,222 @@
+```js
+const express = require("express");
+const mongoose = require("mongoose");
+const session = require("express-session");
+const MongoStore = require("connect-mongo");
+const bcrypt = require("bcrypt");
+const helmet = require("helmet");
+const rateLimit = require("express-rate-limit");
+const validator = require("validator");
+const sanitizeHtml = require("sanitize-html");
+const cors = require("cors");
+
+const app = express();
+app.use(express.json());
+
+// ================= DB =================
+mongoose.connect("mongodb://127.0.0.1:27017/connecthub")
+.then(() => console.log("MongoDB Connected"))
+.catch(err => console.log(err));
+
+// ================= SCHEMAS =================
+const userSchema = new mongoose.Schema({
+  username: String,
+  email: String,
+  password: String,
+  bio: String,
+  profilePic: String
+});
+
+const postSchema = new mongoose.Schema({
+  content: String,
+  userId: mongoose.Schema.Types.ObjectId
+});
+
+const messageSchema = new mongoose.Schema({
+  from: mongoose.Schema.Types.ObjectId,
+  to: mongoose.Schema.Types.ObjectId,
+  text: String
+});
+
+const User = mongoose.model("User", userSchema);
+const Post = mongoose.model("Post", postSchema);
+const Message = mongoose.model("Message", messageSchema);
+
+// ================= HELMET =================
+app.use(helmet());
+
+// ================= CORS =================
+app.use(cors({
+  origin: ["http://localhost:3000", "http://localhost:5173"],
+  credentials: true
+}));
+
+// ================= SESSION =================
+app.use(session({
+  secret: "secret123",
+  resave: false,
+  saveUninitialized: false,
+  store: MongoStore.create({
+    mongoUrl: "mongodb://127.0.0.1:27017/connecthub"
+  }),
+  cookie: {
+    httpOnly: true,
+    maxAge: 1000 * 60 * 20 // 20 min
+  }
+}));
+
+// ================= RATE LIMIT =================
+app.use(rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100
+}));
+
+// ================= SANITIZATION =================
+
+// Allowed HTML (for posts)
+const cleanHTML = (input) => {
+  return sanitizeHtml(input, {
+    allowedTags: ["b", "i", "em", "strong", "a"],
+    allowedAttributes: {
+      a: ["href"]
+    },
+    allowedSchemes: ["http", "https"]
+  });
+};
+
+// Global input sanitizer middleware
+const sanitizeInput = (req, res, next) => {
+  for (let key in req.body) {
+    if (typeof req.body[key] === "string") {
+      req.body[key] = validator.trim(req.body[key]);
+    }
+  }
+  next();
+};
+
+app.use(sanitizeInput);
+
+// ================= AUTH MIDDLEWARE =================
+const isAuth = (req, res, next) => {
+  if (!req.session.userId) return res.send("Login required");
+  next();
+};
+
+// ================= REGISTER =================
+app.post("/register", async (req, res) => {
+  let { username, email, password, bio, profilePic } = req.body;
+
+  // Validate
+  if (!validator.isEmail(email)) return res.send("Invalid email");
+
+  username = validator.escape(username);
+  bio = validator.escape(bio);
+
+  // Validate URL
+  if (!validator.isURL(profilePic)) return res.send("Invalid profile URL");
+
+  const hashed = await bcrypt.hash(password, 10);
+
+  await User.create({
+    username,
+    email,
+    password: hashed,
+    bio,
+    profilePic
+  });
+
+  res.send("User Registered");
+});
+
+// ================= LOGIN =================
+app.post("/login", async (req, res) => {
+  const { email, password } = req.body;
+
+  const user = await User.findOne({ email });
+  if (!user) return res.send("User not found");
+
+  const match = await bcrypt.compare(password, user.password);
+  if (!match) return res.send("Wrong password");
+
+  req.session.regenerate(() => {
+    req.session.userId = user._id;
+    res.send("Login success");
+  });
+});
+
+// ================= POSTS =================
+app.post("/post", isAuth, async (req, res) => {
+  let { content } = req.body;
+
+  // Allow safe HTML only
+  content = cleanHTML(content);
+
+  await Post.create({
+    content,
+    userId: req.session.userId
+  });
+
+  res.send("Post created safely");
+});
+
+app.get("/posts", async (req, res) => {
+  const posts = await Post.find();
+  res.json(posts);
+});
+
+// ================= MESSAGES =================
+app.post("/message", isAuth, async (req, res) => {
+  let { to, text } = req.body;
+
+  text = validator.escape(text);
+
+  await Message.create({
+    from: req.session.userId,
+    to,
+    text
+  });
+
+  res.send("Message sent");
+});
+
+// FIX: Prevent unauthorized access
+app.get("/messages/:userId", isAuth, async (req, res) => {
+  const messages = await Message.find({
+    $or: [
+      { from: req.session.userId, to: req.params.userId },
+      { from: req.params.userId, to: req.session.userId }
+    ]
+  });
+
+  res.json(messages);
+});
+
+// ================= PROFILE =================
+app.put("/profile", isAuth, async (req, res) => {
+  let { bio, profilePic } = req.body;
+
+  bio = validator.escape(bio);
+
+  if (!validator.isURL(profilePic)) {
+    return res.send("Invalid URL");
+  }
+
+  await User.findByIdAndUpdate(req.session.userId, {
+    bio,
+    profilePic
+  });
+
+  res.send("Profile updated");
+});
+
+// ================= LOGOUT =================
+app.get("/logout", (req, res) => {
+  req.session.destroy();
+  res.send("Logged out");
+});
+
+// ================= START =================
+app.listen(5000, () => {
+  console.log("ConnectHub Secure API Running 🚀");
+});
+```
